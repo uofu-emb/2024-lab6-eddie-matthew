@@ -14,13 +14,16 @@
 #include "pico/multicore.h"
 #include "pico/cyw43_arch.h"
 
-#define SUPERVISOR_TASK_PRIORITY      ( tskIDLE_PRIORITY + 3UL )
+#define SUPERVISOR_TASK_PRIORITY      ( tskIDLE_PRIORITY + 4UL )
 #define SUPERVISOR_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
 #define LOW_TASK_PRIORITY     ( tskIDLE_PRIORITY + 1UL )
 #define LOW_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
-#define HIGH_TASK_PRIORITY     ( tskIDLE_PRIORITY + 2UL )
+#define MEDIUM_TASK_PRIORITY     ( tskIDLE_PRIORITY + 2UL )
+#define MEDIUM_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
+
+#define HIGH_TASK_PRIORITY     ( tskIDLE_PRIORITY + 3UL )
 #define HIGH_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
 typedef struct PIData {
@@ -37,28 +40,23 @@ int low_counter = 0;
 void high_task (__unused void *params) {
     vTaskDelay(portTICK_PERIOD_MS*100);
     xSemaphoreTake(semaphore, portMAX_DELAY);
+}
 
-    hard_assert(cyw43_arch_init() == PICO_OK);
-    while (true) {
-        cyw43_arch_gpio_put(CYW43_WL_GPIO_LED_PIN, on);
-        if (count++ % 11) on = !on;
-        vTaskDelay(500);
-    }
+void medium_task (__unused void *params) {
+    vTaskDelay(portTICK_PERIOD_MS*200);
+    for (int i = 0; i < portTICK_PERIOD_MS*500; i++) {}; // 500ms
 }
 
 void low_task (__unused void *params) {
     xSemaphoreTake(semaphore, portMAX_DELAY);
-    while(1) {
-        low_counter++;
-        vTaskDelay(portTICK_PERIOD_MS*1000);
-    }
+    int i = 0;
+    for (i = 0; i < portTICK_PERIOD_MS*200; i++) {}; // 200ms
+    xSemaphoreGive(semaphore);
 }
 
 void supervisor_task(__unused void *params) {
-    while (1) {
-        vTaskDelay(portTICK_PERIOD_MS*5000);
-        putchar(32 + low_counter);
-    }
+    vTaskDelay(portTICK_PERIOD_MS*5000);
+    while(1){};
 }
 
 int main( void )
@@ -67,18 +65,22 @@ int main( void )
     const char *rtos_name;
     rtos_name = "FreeRTOS";
 
-    TaskHandle_t supervisor_task;
-    TaskHandle_t low_task;
-    TaskHandle_t high_task;
+    TaskHandle_t supervisor_task_handle;
+    TaskHandle_t low_task_handle;
+    TaskHandle_t high_task_handle;
+    TaskHandle_t medium_task_handle;
 
     semaphore = xSemaphoreCreateBinary();
+    xSemaphoreGive(semaphore);
 
     xTaskCreate(supervisor_task, "SupervisorThread",
-                SUPERVISOR_TASK_STACK_SIZE, NULL, SUPERVISOR_TASK_PRIORITY, &supervisor_task);
+                SUPERVISOR_TASK_STACK_SIZE, NULL, SUPERVISOR_TASK_PRIORITY, &supervisor_task_handle);
     xTaskCreate(low_task, "LowThread",
-                LOW_TASK_STACK_SIZE, NULL, LOW_TASK_PRIORITY, &low_task);
+                LOW_TASK_STACK_SIZE, NULL, LOW_TASK_PRIORITY, &low_task_handle);
+    xTaskCreate(medium_task, "MediumThread",
+                MEDIUM_TASK_STACK_SIZE, NULL, MEDIUM_TASK_PRIORITY, &medium_task_handle);
     xTaskCreate(high_task, "HighThread",
-                HIGH_TASK_STACK_SIZE, NULL, HIGH_TASK_PRIORITY, &high_task); 
+                HIGH_TASK_STACK_SIZE, NULL, HIGH_TASK_PRIORITY, &high_task_handle); 
     
     vTaskStartScheduler();
     return 0;
