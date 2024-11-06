@@ -42,15 +42,15 @@ void high_task (__unused void *params) {
     xSemaphoreTake(semaphore, portMAX_DELAY);
 }
 
-void medium_task (__unused void *params) {
+void medium_task (__unused void *params) {    vTaskDelay(portTICK_PERIOD_MS*5000);
     vTaskDelay(portTICK_PERIOD_MS*200);
-    for (int i = 0; i < portTICK_PERIOD_MS*500; i++) {}; // 500ms
+    busy_wait_ms(500);
 }
 
 void low_task (__unused void *params) {
     xSemaphoreTake(semaphore, portMAX_DELAY);
     int i = 0;
-    for (i = 0; i < portTICK_PERIOD_MS*200; i++) {}; // 200ms
+    busy_wait_ms(200);
     xSemaphoreGive(semaphore);
 }
 
