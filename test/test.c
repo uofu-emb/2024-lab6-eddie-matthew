@@ -75,7 +75,7 @@ uint32_t induce_priority_inversion () {
     return elapsed;
 }
 
-void test_priority_inversion_binary() {
+void test_priority_inversion_binary () {
     semaphore = xSemaphoreCreateBinary();
     xSemaphoreGive(semaphore);
     uint32_t elapsed_ms = induce_priority_inversion();
@@ -85,19 +85,25 @@ void test_priority_inversion_binary() {
     vSemaphoreDelete(semaphore);
 }
 
-void tearDown(void) {
+void test_priority_inversion_mutex () {
+    semaphore = xSemaphoreCreateMutex();
 
+    uint32_t elapsed_ms = induce_priority_inversion();
+
+    TEST_ASSERT_LESS_THAN_UINT32(3000, elapsed_ms);
+
+    vSemaphoreDelete(semaphore);
 }
-void setUp(void) {
 
-}
-
+void tearDown(void) {}
+void setUp(void) {}
 
 void main_thread (__unused void *params) {
     while (1) {
         printf("Start tests\n");
         UNITY_BEGIN();
         RUN_TEST(test_priority_inversion_binary);
+        RUN_TEST(test_priority_inversion_mutex);
         sleep_ms(10000);
         UNITY_END();
     }
