@@ -62,12 +62,14 @@ eTaskState get_task_status (TaskHandle_t h) {
 void high_task (__unused void *params) {
     vTaskDelay(portTICK_PERIOD_MS*100);
     xSemaphoreTake(semaphore, portMAX_DELAY);
+    printf("HIGH TASK FINISHED\n");
     while (1) {};
 }
 
 void medium_task (__unused void *params) {    
     vTaskDelay(portTICK_PERIOD_MS*200);
     busy_wait_ms(10000);
+    vTaskDelay(portTICK_PERIOD_MS*5000);
     while (1) {};
 }
 
@@ -75,30 +77,33 @@ void low_task (__unused void *params) {
     xSemaphoreTake(semaphore, portMAX_DELAY);
     int i = 0;
     busy_wait_ms(200);
-    printf("LOW TASK GAVE THE SEMAPHORE?");
     xSemaphoreGive(semaphore);
+    printf("LOW TASK GAVE THE SEMAPHORE?\n");
     while (1) {};
 }
 
 void supervisor_task(__unused void *params) {
     vTaskDelay(portTICK_PERIOD_MS*5000);
 
-    printf("SUPERVISOR WAKES UP");
+    printf("SUPERVISOR WAKES UP\n");
 
     if (semaphore != NULL) {
-        printf("SEMAPHORE IS NOT NULL");
+        printf("SEMAPHORE IS NOT NULL\n");
         bool result = xSemaphoreTake(semaphore, 10);
         printf("GOT A RESULT");
         if (result == pdFALSE) {
-            printf("SEMAPHORE NOT AVAILABLE");
+            printf("SEMAPHORE NOT AVAILABLE\n");
         } else {
-            printf("SEMAPHORE AVAILABLE");
+            printf("SEMAPHORE AVAILABLE\n");
         }
     } else {
-        printf("SEMAPHORE IS NULL");
+        printf("SEMAPHORE IS NULL\n");
     }
 
-    while (1) {};
+
+    while (1) {
+        vTaskDelay(portTICK_PERIOD_MS*5000);
+    };
 }
 
 int main( void )
@@ -109,7 +114,7 @@ int main( void )
     const char *rtos_name;
     rtos_name = "FreeRTOS";
 
-    printf("STARTING");
+    printf("STARTING\n");
 
     semaphore = xSemaphoreCreateBinary();
     xSemaphoreGive(semaphore);
