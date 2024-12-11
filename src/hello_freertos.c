@@ -26,49 +26,90 @@
 #define HIGH_TASK_PRIORITY     ( tskIDLE_PRIORITY + 3UL )
 #define HIGH_TASK_STACK_SIZE configMINIMAL_STACK_SIZE
 
-typedef struct PIData {
-    SemaphoreHandle_t sempahore;
-};
-
 SemaphoreHandle_t semaphore;
+TaskHandle_t supervisor_task_handle;
+TaskHandle_t low_task_handle;
+TaskHandle_t high_task_handle;
+TaskHandle_t medium_task_handle;
+
 bool on;
 int count;
 
 int low_counter = 0;
 
+eTaskState get_task_status (TaskHandle_t h) {
+    TaskStatus_t xTaskDetails;
+
+    /* Check the handle is not NULL. */
+    configASSERT( h );
+
+    /* Use the handle to obtain further information about the task. */
+    vTaskGetInfo( /* The handle of the task being queried. */
+                  h,
+                  /* The TaskStatus_t structure to complete with information
+                     on xTask. */
+                  &xTaskDetails,
+                  /* Include the stack high water mark value in the
+                     TaskStatus_t structure. */
+                  pdTRUE,
+                  /* Include the task state in the TaskStatus_t structure. */
+                  eInvalid );
+
+    return xTaskDetails.eCurrentState;
+}
+
 
 void high_task (__unused void *params) {
     vTaskDelay(portTICK_PERIOD_MS*100);
     xSemaphoreTake(semaphore, portMAX_DELAY);
+    while (1) {};
 }
 
-void medium_task (__unused void *params) {    vTaskDelay(portTICK_PERIOD_MS*5000);
+void medium_task (__unused void *params) {    
     vTaskDelay(portTICK_PERIOD_MS*200);
-    busy_wait_ms(500);
+    busy_wait_ms(10000);
+    while (1) {};
 }
 
 void low_task (__unused void *params) {
     xSemaphoreTake(semaphore, portMAX_DELAY);
     int i = 0;
     busy_wait_ms(200);
+    printf("LOW TASK GAVE THE SEMAPHORE?");
     xSemaphoreGive(semaphore);
+    while (1) {};
 }
 
 void supervisor_task(__unused void *params) {
     vTaskDelay(portTICK_PERIOD_MS*5000);
-    while(1){};
+
+    printf("SUPERVISOR WAKES UP");
+
+    if (semaphore != NULL) {
+        printf("SEMAPHORE IS NOT NULL");
+        bool result = xSemaphoreTake(semaphore, 10);
+        printf("GOT A RESULT");
+        if (result == pdFALSE) {
+            printf("SEMAPHORE NOT AVAILABLE");
+        } else {
+            printf("SEMAPHORE AVAILABLE");
+        }
+    } else {
+        printf("SEMAPHORE IS NULL");
+    }
+
+    while (1) {};
 }
 
 int main( void )
 {
     stdio_init_all();
+    sleep_ms(5000);
+
     const char *rtos_name;
     rtos_name = "FreeRTOS";
 
-    TaskHandle_t supervisor_task_handle;
-    TaskHandle_t low_task_handle;
-    TaskHandle_t high_task_handle;
-    TaskHandle_t medium_task_handle;
+    printf("STARTING");
 
     semaphore = xSemaphoreCreateBinary();
     xSemaphoreGive(semaphore);
