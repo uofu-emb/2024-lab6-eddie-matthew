@@ -27,6 +27,18 @@ TaskHandle_t low_task_handle;
 TaskHandle_t high_task_handle;
 TaskHandle_t medium_task_handle;
 
+void busy_busy(void)
+{
+    for (int i = 0; ; i++);
+}
+
+void busy_yield(void)
+{
+    for (int i = 0; ; i++) {
+        taskYIELD();
+    }
+}
+
 void high_task (__unused void *params) {
     vTaskDelay(portTICK_PERIOD_MS*100);
     xSemaphoreTake(semaphore, portMAX_DELAY);
@@ -75,6 +87,30 @@ uint32_t induce_priority_inversion () {
     return elapsed;
 }
 
+// Returns 1 if func1 ran for longer, 2 if func2 ran for longer
+uint8_t compare_threads (void* func1, void* func2, uint16_t priority1, uint16_t priority2) {
+    TaskHandle_t task1;
+    TaskHandle_t task2;
+
+    xTaskCreate(func1, configMINIMAL_STACK_SIZE, "COMPARETASK1", NULL, tskIDLE_PRIORITY+priority1, &task1);
+    xTaskCreate(func2, configMINIMAL_STACK_SIZE, "COMPARETASK2", NULL, tskIDLE_PRIORITY+priority2, &task2);
+
+    vTaskDelay(portTICK_PERIOD_MS*1000);
+
+    uint8_t res;
+
+    if (ulTaskGetRunTimeCounter(task1) > ulTaskGetRunTimeCounter(task2)) {
+        res = 1;
+    } else {
+        res = 2;
+    }
+
+    vTaskDelete(task1);
+    vTaskDelete(task2);
+
+    return res;
+}
+
 void test_priority_inversion_binary () {
     semaphore = xSemaphoreCreateBinary();
     xSemaphoreGive(semaphore);
@@ -93,6 +129,11 @@ void test_priority_inversion_mutex () {
     TEST_ASSERT_LESS_THAN_UINT32(3000, elapsed_ms);
 
     vSemaphoreDelete(semaphore);
+}
+
+void test_same_priority_both_busy () {
+    uint8_t res = compare_threads(busy_busy, busy_busy, 1, 1);
+    TEST_ASSERT_EQUAL(1, res);
 }
 
 void tearDown(void) {}
