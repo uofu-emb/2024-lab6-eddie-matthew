@@ -111,54 +111,74 @@ void test_priority_inversion_mutex () {
 
 
 
-void test(void* func1,void* func2, uint64_t *t1_time, uint64_t *t2_time, uint64_t t1_t2_delay_ms,  uint16_t priority1,  uint16_t priority2) {
-    TaskHandle_t t1, t2;
+void schedule_test(void* func1,void* func2, uint64_t *time1, uint64_t *time2, uint64_t delay,  uint16_t priority1,  uint16_t priority2) {
+    
+    TaskHandle_t task1, task2;
 
     uint64_t start_count = portGET_RUN_TIME_COUNTER_VALUE();
 
-    xTaskCreate(func1, "t1", configMINIMAL_STACK_SIZE, NULL, priority1, &t1);
+    xTaskCreate(func1, "t1", configMINIMAL_STACK_SIZE, NULL, priority1, &task1);
 
-    vTaskDelay(t1_t2_delay_ms / portTICK_PERIOD_MS);
+    vTaskDelay(delay / portTICK_PERIOD_MS);
 
-    xTaskCreate(func2, "t2", configMINIMAL_STACK_SIZE, NULL, priority2, &t2);
+    xTaskCreate(func2, "t2", configMINIMAL_STACK_SIZE, NULL, priority2, &task2);
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);
 
-    *t1_time = ulTaskGetRunTimeCounter(t1);
-    *t2_time = ulTaskGetRunTimeCounter(t2);
-    
-    printf("Task 1 Runtime: %llu\n", *t1_time);
-    printf("Task 2 Runtime: %llu\n", *t2_time);
+    *time1 = ulTaskGetRunTimeCounter(task1);
+    *time2 = ulTaskGetRunTimeCounter(task2);
 
-    vTaskDelete(t1);
-    vTaskDelete(t2);
+    vTaskDelete(task1);
+    vTaskDelete(task2);
 }
 
 void both_busy_busy(void) {
-    uint64_t t1_time = 0, t2_time = 0;
-    test(busy_busy, busy_busy, &t1_time, &t2_time, 0, LOW_TASK_PRIORITY , LOW_TASK_PRIORITY );
+    uint64_t t1_time, t2_time = 0;
+     schedule_test(busy_busy, busy_busy, &t1_time, &t2_time, 0, LOW_TASK_PRIORITY , LOW_TASK_PRIORITY );
 
     TEST_ASSERT(t1_time > 400000 && t1_time < 600000);
     TEST_ASSERT(t2_time > 400000 && t2_time < 600000);
 }
 
 void both_busy_yield(void) {
-    uint64_t t1_time = 0, t2_time = 0;
-    test(busy_yield, busy_yield, &t1_time, &t2_time, 0, LOW_TASK_PRIORITY , LOW_TASK_PRIORITY );
+    uint64_t t1_time , t2_time = 0;
+     schedule_test(busy_yield, busy_yield, &t1_time, &t2_time, 0, LOW_TASK_PRIORITY , LOW_TASK_PRIORITY );
 
     TEST_ASSERT(t1_time > 400000 && t1_time < 600000);
     TEST_ASSERT(t2_time > 400000 && t2_time < 600000);
 }
 
 void one_busy_one_yield(void) {
-    uint64_t t1_time = 0, t2_time = 0;
-    test(busy_busy, busy_yield, &t1_time, &t2_time, 0,  LOW_TASK_PRIORITY,  LOW_TASK_PRIORITY);
+    uint64_t t1_time , t2_time = 0;
+     schedule_test(busy_busy, busy_yield, &t1_time, &t2_time, 0,  LOW_TASK_PRIORITY,  LOW_TASK_PRIORITY);
 
     TEST_ASSERT(t1_time > 900000);
     TEST_ASSERT(t2_time < 100000);
 }
 
+void busy_busy_high_priority_first(void) {
+    uint64_t t1_time , t2_time = 0;
+     schedule_test(busy_busy, busy_busy, &t1_time, &t2_time, 100, HIGH_TASK_PRIORITY, LOW_TASK_PRIORITY);
 
+    TEST_ASSERT(t1_time > 900000);
+    TEST_ASSERT(t2_time == 0);
+}
+
+void busy_busy_low_priority_first(void) {
+    uint64_t t1_time , t2_time = 0;
+     schedule_test(busy_busy, busy_busy, &t1_time, &t2_time, 100, LOW_TASK_PRIORITY, HIGH_TASK_PRIORITY);
+
+    TEST_ASSERT(t1_time < 100000);
+    TEST_ASSERT(t2_time > 900000);
+}
+
+void busy_yield_different_priorities(void) {
+    uint64_t t1_time, t2_time = 0;
+     schedule_test(busy_yield, busy_yield, &t1_time, &t2_time, 0, HIGH_TASK_PRIORITY, LOW_TASK_PRIORITY);
+
+    TEST_ASSERT(t1_time > 900000);
+    TEST_ASSERT(t2_time == 0);
+}
 
 void tearDown(void) {}
 void setUp(void) {}
@@ -167,11 +187,14 @@ void main_thread (__unused void *params) {
     while (1) {
         printf("Start tests\n");
         UNITY_BEGIN();
-        //RUN_TEST(test_priority_inversion_binary);
-        //RUN_TEST(test_priority_inversion_mutex);
+        RUN_TEST(test_priority_inversion_binary);
+        RUN_TEST(test_priority_inversion_mutex);
         RUN_TEST(both_busy_busy);
         RUN_TEST(both_busy_yield);
         RUN_TEST(one_busy_one_yield);
+        RUN_TEST(busy_busy_high_priority_first);
+        RUN_TEST(busy_busy_low_priority_first);
+        RUN_TEST(busy_yield_different_priorities);
         sleep_ms(10000);
         UNITY_END();
     }
