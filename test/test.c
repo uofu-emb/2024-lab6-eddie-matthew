@@ -27,6 +27,8 @@ TaskHandle_t low_task_handle;
 TaskHandle_t high_task_handle;
 TaskHandle_t medium_task_handle;
 
+#define TEST_DURATION 5000
+
 void busy_busy(void)
 {
     for (int i = 0; ; i++);
@@ -87,30 +89,6 @@ uint32_t induce_priority_inversion () {
     return elapsed;
 }
 
-// Returns 1 if func1 ran for longer, 2 if func2 ran for longer
-uint8_t compare_threads (void* func1, void* func2, uint16_t priority1, uint16_t priority2) {
-    TaskHandle_t task1;
-    TaskHandle_t task2;
-
-    xTaskCreate(func1, configMINIMAL_STACK_SIZE, "COMPARETASK1", NULL, tskIDLE_PRIORITY+priority1, &task1);
-    xTaskCreate(func2, configMINIMAL_STACK_SIZE, "COMPARETASK2", NULL, tskIDLE_PRIORITY+priority2, &task2);
-
-    vTaskDelay(portTICK_PERIOD_MS*1000);
-
-    uint8_t res;
-
-    if (ulTaskGetRunTimeCounter(task1) > ulTaskGetRunTimeCounter(task2)) {
-        res = 1;
-    } else {
-        res = 2;
-    }
-
-    vTaskDelete(task1);
-    vTaskDelete(task2);
-
-    return res;
-}
-
 void test_priority_inversion_binary () {
     semaphore = xSemaphoreCreateBinary();
     xSemaphoreGive(semaphore);
@@ -131,10 +109,56 @@ void test_priority_inversion_mutex () {
     vSemaphoreDelete(semaphore);
 }
 
-void test_same_priority_both_busy () {
-    uint8_t res = compare_threads(busy_busy, busy_busy, 1, 1);
-    TEST_ASSERT_EQUAL(1, res);
+
+
+void test(void* func1,void* func2, uint64_t *t1_time, uint64_t *t2_time, uint64_t t1_t2_delay_ms,  uint16_t priority1,  uint16_t priority2) {
+    TaskHandle_t t1, t2;
+
+    uint64_t start_count = portGET_RUN_TIME_COUNTER_VALUE();
+
+    xTaskCreate(func1, "t1", configMINIMAL_STACK_SIZE, NULL, priority1, &t1);
+
+    vTaskDelay(t1_t2_delay_ms / portTICK_PERIOD_MS);
+
+    xTaskCreate(func2, "t2", configMINIMAL_STACK_SIZE, NULL, priority2, &t2);
+
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+
+    *t1_time = ulTaskGetRunTimeCounter(t1);
+    *t2_time = ulTaskGetRunTimeCounter(t2);
+    
+    printf("Task 1 Runtime: %llu\n", *t1_time);
+    printf("Task 2 Runtime: %llu\n", *t2_time);
+
+    vTaskDelete(t1);
+    vTaskDelete(t2);
 }
+
+void both_busy_busy(void) {
+    uint64_t t1_time = 0, t2_time = 0;
+    test(busy_busy, busy_busy, &t1_time, &t2_time, 0, LOW_TASK_PRIORITY , LOW_TASK_PRIORITY );
+
+    TEST_ASSERT(t1_time > 400000 && t1_time < 600000);
+    TEST_ASSERT(t2_time > 400000 && t2_time < 600000);
+}
+
+void both_busy_yield(void) {
+    uint64_t t1_time = 0, t2_time = 0;
+    test(busy_yield, busy_yield, &t1_time, &t2_time, 0, LOW_TASK_PRIORITY , LOW_TASK_PRIORITY );
+
+    TEST_ASSERT(t1_time > 400000 && t1_time < 600000);
+    TEST_ASSERT(t2_time > 400000 && t2_time < 600000);
+}
+
+void one_busy_one_yield(void) {
+    uint64_t t1_time = 0, t2_time = 0;
+    test(busy_busy, busy_yield, &t1_time, &t2_time, 0,  LOW_TASK_PRIORITY,  LOW_TASK_PRIORITY);
+
+    TEST_ASSERT(t1_time > 900000);
+    TEST_ASSERT(t2_time < 100000);
+}
+
+
 
 void tearDown(void) {}
 void setUp(void) {}
@@ -143,12 +167,17 @@ void main_thread (__unused void *params) {
     while (1) {
         printf("Start tests\n");
         UNITY_BEGIN();
-        RUN_TEST(test_priority_inversion_binary);
-        RUN_TEST(test_priority_inversion_mutex);
+        //RUN_TEST(test_priority_inversion_binary);
+        //RUN_TEST(test_priority_inversion_mutex);
+        RUN_TEST(both_busy_busy);
+        RUN_TEST(both_busy_yield);
+        RUN_TEST(one_busy_one_yield);
         sleep_ms(10000);
         UNITY_END();
     }
 }
+
+
 
 int main (void)
 {
@@ -159,4 +188,6 @@ int main (void)
     xTaskCreate(main_thread, "MainThread",
                 configMINIMAL_STACK_SIZE, NULL, tskIDLE_PRIORITY+10, &main_handle);
     vTaskStartScheduler();
+
+    return 0;
 }
